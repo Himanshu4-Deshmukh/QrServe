@@ -42,7 +42,12 @@ export const createCategory = (data: any) =>
   fetchApi("/api/menu/categories", { method: "POST", body: JSON.stringify(data) });
 
 export const getTables      = () => fetchApi<any[]>("/api/tables");
+export const getTable       = (id: string) => fetchApi<any>(`/api/tables/${id}`);
 export const getTableByQr   = (qr: string) => fetchApi<any>(`/api/tables/qr/${qr}`);
+export const createTable = (data: { tableNumber?: number; seats?: number }) =>
+  fetchApi("/api/tables", { method: "POST", body: JSON.stringify(data) });
+export const deleteTable = (id: string) =>
+  fetchApi(`/api/tables/${id}`, { method: "DELETE" });
 
 export const getOrders = (status?: string, page = 1, pageSize = 50) =>
   fetchApi<any[]>(`/api/orders?page=${page}&pageSize=${pageSize}${status ? `&status=${status}` : ""}`);

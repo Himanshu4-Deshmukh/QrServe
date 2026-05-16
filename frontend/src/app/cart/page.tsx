@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCart } from "@/context/CartContext";
 import { createOrder } from "@/lib/api";
 import { ArrowLeft, Minus, Plus, Trash2, ShoppingBag, MessageSquare } from "lucide-react";
+import { getTableQr, saveLastOrderId } from "@/lib/orderSession";
 
 export default function CartPage() {
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function CartPage() {
         tableId, notes: notes || null,
         items: items.map((i) => ({ menuItemId: i.menuItem.id, quantity: i.quantity, specialInstructions: i.specialInstructions || null })),
       });
+      saveLastOrderId(order.id);
       clearCart();
       router.push(`/order/${order.id}`);
     } catch (e) { alert("Failed to place order."); console.error(e); } finally { setSubmitting(false); }
@@ -32,7 +34,12 @@ export default function CartPage() {
       <ShoppingBag className="w-16 h-16 text-gray-300 mb-4" />
       <h2 className="text-xl font-bold text-gray-700">Your cart is empty</h2>
       <p className="text-gray-400 mt-2">Add some delicious items from the menu</p>
-      <button onClick={() => window.history.back()} className="btn-primary mt-6">Browse Menu</button>
+      <button
+        onClick={() => router.push(`/menu?qr=${encodeURIComponent(getTableQr() || "QS-TABLE-001")}`)}
+        className="btn-primary mt-6"
+      >
+        Browse Menu
+      </button>
     </div>
   );
 
@@ -40,9 +47,13 @@ export default function CartPage() {
     <div className="min-h-screen bg-gray-50 pb-40">
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <button onClick={() => router.push(`/menu?qr=${new URLSearchParams(window.location.search).get("qr") || "QS-TABLE-001"}`)} className="p-2 -ml-2 hover:bg-gray-100 rounded-xl">
-  <ArrowLeft className="w-5 h-5" />
-</button>
+          <button
+            onClick={() => router.push(`/menu?qr=${encodeURIComponent(getTableQr() || "QS-TABLE-001")}`)}
+            className="p-2 -ml-2 hover:bg-gray-100 rounded-xl"
+            aria-label="Back to menu"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           <div className="text-center"><h1 className="text-lg font-bold">Your Order</h1>{tableNumber && <p className="text-xs text-gray-500">Table {tableNumber}</p>}</div>
           <div className="w-9" />
         </div>

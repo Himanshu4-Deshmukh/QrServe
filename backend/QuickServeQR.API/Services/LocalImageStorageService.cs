@@ -25,6 +25,9 @@ public class LocalImageStorageService : IImageStorageService
     public Task DeleteAsync(string? url)
     {
         if (string.IsNullOrEmpty(url)) return Task.CompletedTask;
+        if (!url.StartsWith("/images/menu/", StringComparison.OrdinalIgnoreCase))
+            return Task.CompletedTask;
+
         var filePath = Path.Combine(_env.ContentRootPath, "wwwroot", url.TrimStart('/'));
         if (File.Exists(filePath)) File.Delete(filePath);
         return Task.CompletedTask;

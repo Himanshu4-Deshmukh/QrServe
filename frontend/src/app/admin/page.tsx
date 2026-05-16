@@ -7,8 +7,9 @@ import { useToast } from "@/context/ToastContext";
 import {
   getDashboardAnalytics, getOrders, getTables, getCategories,
   createCategory, createMenuItem, updateMenuItem, deleteMenuItem,
-  updateOrderStatus, updatePayment, uploadMenuItemImage, deleteMenuItemImage,
+  updateOrderStatus, updatePayment, uploadMenuItemImage, deleteMenuItemImage, createTable, deleteTable,
 } from "@/lib/api";
+import { playOrderNotificationSound, unlockNotificationSound } from "@/lib/notificationSound";
 import { DashboardAnalytics, Order, MenuItem, Category, OrderStatus, RestaurantTable } from "@/types";
 import { startConnection, joinKitchen } from "@/lib/signalr";
 import { LayoutDashboard, ArrowLeft, ShoppingBag, UtensilsCrossed, Users, BarChart3, LogOut } from "lucide-react";
@@ -55,8 +56,23 @@ function AdminContent() {
     }
   };
 
+  const refetchTables = async () => {
+    try {
+      const t = await getTables();
+      setTables(t);
+    } catch {
+      toast("Failed to reload tables", "error");
+    }
+  };
+
   useEffect(() => {
     loadAll();
+
+    const unlock = () => {
+      unlockNotificationSound().catch(() => {});
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
 
     (async () => {
       try {
@@ -67,7 +83,8 @@ function AdminContent() {
         conn.off("OrderStatusUpdated");
 
         conn.on("NewOrder", (newOrder: Order) => {
-          setOrders((prev) => [newOrder, ...prev]);
+          playOrderNotificationSound().catch(() => {});
+          setOrders((prev) => (prev.some((o) => o.id === newOrder.id) ? prev : [newOrder, ...prev]));
           getDashboardAnalytics().then(setAnalytics).catch(() => {});
           getTables().then(setTables).catch(() => {});
         });
@@ -83,6 +100,11 @@ function AdminContent() {
         // SignalR is best-effort; page still works without it
       }
     })();
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   // ── Order handlers ──────────────────────────────────────────────────────────
@@ -203,6 +225,26 @@ function AdminContent() {
     }
   };
 
+  const handleCreateTable = async (data: { tableNumber?: number; seats?: number }) => {
+    try {
+      await createTable(data);
+      await refetchTables();
+      toast("Table created", "success");
+    } catch (e: any) {
+      toast(e?.message || "Failed to create table", "error");
+    }
+  };
+
+  const handleDeleteTable = async (id: string) => {
+    try {
+      await deleteTable(id);
+      await refetchTables();
+      toast("Table deleted", "success");
+    } catch (e: any) {
+      toast(e?.message || "Failed to delete table", "error");
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -283,7 +325,7 @@ function AdminContent() {
           />
         )}
         {tab === "tables" && (
-          <TablesTab tables={tables} />
+          <TablesTab tables={tables} onCreateTable={handleCreateTable} onDeleteTable={handleDeleteTable} />
         )}
       </main>
     </div>

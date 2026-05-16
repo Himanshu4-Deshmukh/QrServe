@@ -14,11 +14,13 @@ public class MenuController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IImageStorageService _images;
+    private readonly ILogger<MenuController> _logger;
 
-    public MenuController(AppDbContext db, IImageStorageService images)
+    public MenuController(AppDbContext db, IImageStorageService images, ILogger<MenuController> logger)
     {
         _db     = db;
         _images = images;
+        _logger = logger;
     }
 
     private static string[]? ParseTags(string? tags) =>
@@ -130,24 +132,32 @@ public class MenuController : ControllerBase
     [HttpPost("items/{id}/image")]
     [Authorize(Roles = "Admin")]
     [RequestSizeLimit(5 * 1024 * 1024)]
-    public async Task<IActionResult> UploadImage(Guid id, IFormFile file)
+    public async Task<IActionResult> UploadImage(Guid id, [FromForm] IFormFile file)
     {
-        var item = await _db.MenuItems.FindAsync(id);
-        if (item == null) return NotFound();
+        try
+        {
+            var item = await _db.MenuItems.FindAsync(id);
+            if (item == null) return NotFound();
 
-        if (file == null || file.Length == 0)
-            return BadRequest("No file uploaded");
+            if (file == null || file.Length == 0)
+                return BadRequest("No file uploaded");
 
-        var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!allowed.Contains(ext))
-            return BadRequest("Only image files (jpg, png, webp, gif) are allowed");
+            var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!allowed.Contains(ext))
+                return BadRequest("Only image files (jpg, png, webp, gif) are allowed");
 
-        item.ImageUrl = await _images.SaveAsync(file, item.ImageUrl);
-        item.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+            item.ImageUrl = await _images.SaveAsync(file, item.ImageUrl);
+            item.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
 
-        return Ok(new { imageUrl = item.ImageUrl });
+            return Ok(new { imageUrl = item.ImageUrl });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to upload menu image for item {ItemId}", id);
+            return Problem("Image upload failed. Check server logs for the exception.");
+        }
     }
 
     [HttpDelete("items/{id}/image")]

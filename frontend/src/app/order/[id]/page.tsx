@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "next/navigation";
-import { getOrder } from "@/lib/api";
+import { useParams, useRouter } from "next/navigation";
+import { getOrder, getOrdersByTable, getTable } from "@/lib/api";
 import { startConnection, joinTable } from "@/lib/signalr";
 import { Order, OrderStatus } from "@/types";
-import { CheckCircle2, Clock, ChefHat, Bell, UtensilsCrossed, CreditCard, Check } from "lucide-react";
+import { CheckCircle2, Clock, ChefHat, Bell, UtensilsCrossed, CreditCard, Check, ArrowLeft, ShoppingBag } from "lucide-react";
+import { getTableQr, saveTableQr } from "@/lib/orderSession";
 
 const statusSteps: { status: OrderStatus; label: string; icon: React.ReactNode }[] = [
   { status: "Pending", label: "Order Placed", icon: <Clock className="w-5 h-5" /> },
@@ -18,11 +19,15 @@ const statusIndex = (s: OrderStatus) => statusSteps.findIndex((x) => x.status ==
 
 export default function OrderTrackingPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [justUpdatedStep, setJustUpdatedStep] = useState<number | null>(null);
   const [connected, setConnected] = useState(false);
+  const [tableQr, setTableQr] = useState("");
+  const [tableOrders, setTableOrders] = useState<Order[]>([]);
   const lastStatusRef = useRef<string>("");
+  const tableQrRef = useRef("");
 
   // Detect status change and trigger animation
   const handleStatusChange = (newStatus: string) => {
@@ -45,6 +50,32 @@ export default function OrderTrackingPage() {
         if (!mounted) return;
         handleStatusChange(data.status);
         setOrder(data);
+        if (!tableQrRef.current) {
+          const storedQr = getTableQr();
+          if (storedQr) {
+            tableQrRef.current = storedQr;
+            setTableQr(storedQr);
+          } else {
+            try {
+              const table = await getTable(data.tableId);
+              if (!mounted) return;
+              saveTableQr(table.qrCode);
+              tableQrRef.current = table.qrCode;
+              setTableQr(table.qrCode);
+            } catch {
+              // Best effort only.
+            }
+          }
+        }
+
+        try {
+          const activeOrders = await getOrdersByTable(data.tableId);
+          if (!mounted) return;
+          setTableOrders(activeOrders);
+        } catch (err) {
+          console.error("Table order load failed:", err);
+        }
+
         setLoading(false);
       } catch (e) {
         console.error("Poll failed:", e);
@@ -117,12 +148,21 @@ export default function OrderTrackingPage() {
     );
 
   const currentStep = statusIndex(order.status);
+  const menuUrl = `/menu?qr=${encodeURIComponent(tableQr || getTableQr() || "QS-TABLE-001")}`;
+  const activeTableOrders = tableOrders.filter((o) => !["Completed", "Cancelled"].includes(o.status));
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="w-9" />
+          <button
+            onClick={() => router.push(menuUrl)}
+            className="p-2 -ml-2 hover:bg-gray-100 rounded-xl"
+            aria-label="Back to menu"
+            title="Back to menu"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           <div className="text-center">
             <h1 className="text-lg font-bold">Order #{order.orderNumber}</h1>
             <p className="text-xs text-gray-500">Table {order.tableNumber}</p>
@@ -280,7 +320,7 @@ export default function OrderTrackingPage() {
         </div>
 
         {/* Payment Status */}
-<div className={`card border-2 transition-all duration-500 ${
+        <div className={`card border-2 transition-all duration-500 ${
   order.paymentStatus === "Paid"
     ? "border-green-200 bg-green-50"
     : "border-gray-100 bg-white"
@@ -319,7 +359,65 @@ export default function OrderTrackingPage() {
         <CreditCard className="w-6 h-6 text-yellow-500" />
       )}
     </div>
-  </div>
+        </div>
+
+        {activeTableOrders.length > 1 && (
+          <div className="card border-brand-200 bg-brand-50">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="font-bold text-gray-900">Table Orders</h2>
+                <p className="text-sm text-gray-500">
+                  {activeTableOrders.length} active orders at this table
+                </p>
+              </div>
+              <span className="badge bg-brand-100 text-brand-700">
+                {activeTableOrders.length} Active
+              </span>
+            </div>
+            <div className="space-y-3">
+              {activeTableOrders.map((tableOrder) => {
+                const isCurrent = tableOrder.id === order.id;
+                return (
+                  <div
+                    key={tableOrder.id}
+                    className={`rounded-xl border p-4 ${isCurrent ? "border-brand-300 bg-white" : "border-gray-200 bg-white/70"}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          Order #{tableOrder.orderNumber}
+                          {isCurrent && <span className="ml-2 text-xs text-brand-600">Current</span>}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {tableOrder.items.length} item{tableOrder.items.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          tableOrder.status === "Ready"
+                            ? "bg-green-100 text-green-700"
+                            : tableOrder.status === "Preparing"
+                            ? "bg-purple-100 text-purple-700"
+                            : tableOrder.status === "Confirmed"
+                            ? "bg-blue-100 text-blue-700"
+                            : tableOrder.status === "Pending"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {tableOrder.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex justify-between text-sm text-gray-500">
+                      <span>Total</span>
+                      <span className="font-semibold text-gray-900">${tableOrder.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Payment Progress Bar */}
         <div className="mt-3 pt-3 border-t border-gray-100">
@@ -334,7 +432,16 @@ export default function OrderTrackingPage() {
             </span>
           </div>
         </div>
-      </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <button
+            onClick={() => router.push(menuUrl)}
+            className="btn-primary flex items-center justify-center gap-2"
+          >
+            <ShoppingBag className="w-4 h-4" /> Order More
+          </button>
+        </div>
       </main>
     </div>
   );

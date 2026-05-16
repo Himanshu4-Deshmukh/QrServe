@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { getCategories, getTableByQr } from "@/lib/api";
+import { getCategories, getOrdersByTable, getTableByQr } from "@/lib/api";
 import { useCart } from "@/context/CartContext";
+import { getLastOrderId, saveTableQr } from "@/lib/orderSession";
 import { Category, MenuItem } from "@/types";
-import { ShoppingCart, Clock, Flame, ArrowLeft, Plus, Minus, Search } from "lucide-react";
+import { ShoppingCart, Clock, Flame, Plus, Minus, Search, ClipboardList, ArrowLeft } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5139";
 
@@ -30,6 +31,12 @@ export default function MenuPage() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [lastOrderId, setLastOrderId] = useState("");
+  const [activeOrdersCount, setActiveOrdersCount] = useState(0);
+
+  useEffect(() => {
+    setLastOrderId(getLastOrderId());
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -37,6 +44,9 @@ export default function MenuPage() {
         const [cats, table] = await Promise.all([getCategories(), getTableByQr(qr)]);
         setCategories(cats);
         setTable(table.id, table.tableNumber);
+        saveTableQr(qr);
+        const activeOrders = await getOrdersByTable(table.id);
+        setActiveOrdersCount(activeOrders.length);
         if (cats.length > 0) setActiveCategory(cats[0].id);
       } catch (e) {
         console.error(e);
@@ -64,19 +74,38 @@ export default function MenuPage() {
     <div className="min-h-screen bg-gray-50 pb-32">
       <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-gray-100">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="w-9" />
+          <button
+            onClick={() => router.push("/")}
+            className="p-2 -ml-2 hover:bg-gray-100 rounded-xl"
+            aria-label="Back to home"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           <div className="text-center">
             <h1 className="text-lg font-bold">Menu</h1>
             {tableNumber && <p className="text-xs text-gray-500">Table {tableNumber}</p>}
           </div>
-          <button onClick={() => router.push("/cart")} className="relative p-2 -mr-2 hover:bg-gray-100 rounded-xl">
-            <ShoppingCart className="w-5 h-5" />
-            {totalItems > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-500 text-white text-xs rounded-full flex items-center justify-center">
-                {totalItems}
-              </span>
+          <div className="flex items-center gap-2">
+            {lastOrderId && (
+              <button
+                onClick={() => router.push(`/order/${lastOrderId}`)}
+                className="btn-secondary text-sm flex items-center gap-2"
+                aria-label="View order status"
+                title="View order status"
+              >
+                <ClipboardList className="w-5 h-5" />
+                Status{activeOrdersCount > 0 ? ` (${activeOrdersCount})` : ""}
+              </button>
             )}
-          </button>
+            <button onClick={() => router.push("/cart")} className="relative p-2 -mr-2 hover:bg-gray-100 rounded-xl">
+              <ShoppingCart className="w-5 h-5" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-brand-500 text-white text-xs rounded-full flex items-center justify-center">
+                  {totalItems}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
         <div className="max-w-3xl mx-auto px-4 pb-3">
           <div className="relative">

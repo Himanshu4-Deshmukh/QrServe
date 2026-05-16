@@ -22,7 +22,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // ── Image storage ─────────────────────────────────────────────────────────────
 builder.Services.AddHttpClient("supabase");
-if (!string.IsNullOrEmpty(builder.Configuration["Supabase:ServiceRoleKey"]))
+static bool HasRealValue(string? value) =>
+    !string.IsNullOrWhiteSpace(value) && !value.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase);
+
+var supabaseUrl = builder.Configuration["Supabase:Url"];
+var supabaseKey = builder.Configuration["Supabase:ServiceRoleKey"];
+
+if (HasRealValue(supabaseUrl) && HasRealValue(supabaseKey))
     builder.Services.AddScoped<IImageStorageService, SupabaseStorageService>();
 else
     builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();

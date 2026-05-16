@@ -19,48 +19,56 @@ public class AnalyticsController : ControllerBase
     {
         var today = DateTime.UtcNow.Date;
 
-        var totalOrders = await _db.Orders.CountAsync(o => o.CreatedAt >= today);
+        var ordersQuery = _db.Orders
+            .AsNoTracking()
+            .Where(o => o.CreatedAt >= today);
 
-        var totalRevenue = await _db.Orders
-            .Where(o => o.CreatedAt >= today && o.PaymentStatus == "Paid")
+        var totalOrders = await ordersQuery.CountAsync();
+
+        var totalRevenue = await ordersQuery
+            .Where(o => o.PaymentStatus == "Paid")
             .SumAsync(o => (decimal?)o.Total) ?? 0;
 
-        var activeOrders = await _db.Orders
-            .CountAsync(o => o.CreatedAt >= today
-                && o.Status != "Completed" && o.Status != "Cancelled");
+        var activeOrders = await ordersQuery
+            .CountAsync(o => o.Status != "Completed" && o.Status != "Cancelled");
 
         var avgValue = totalOrders > 0
-            ? await _db.Orders
-                .Where(o => o.CreatedAt >= today)
+            ? await ordersQuery
                 .AverageAsync(o => (decimal?)o.Total) ?? 0
             : 0;
 
         var tables = await _db.Tables
-            .Select(t => new { t.IsOccupied })
+            .AsNoTracking()
+            .Select(t => t.IsOccupied)
             .ToListAsync();
 
-        var topItems = await _db.Orders
+        var todaysOrders = await _db.Orders
+            .AsNoTracking()
             .Where(o => o.CreatedAt >= today)
+            .Include(o => o.Items)
+                .ThenInclude(i => i.MenuItem)
+            .ToListAsync();
+
+        var topItems = todaysOrders
             .SelectMany(o => o.Items)
-            .GroupBy(i => i.MenuItem!.Name)
+            .GroupBy(i => i.MenuItem?.Name ?? "Unknown")
             .Select(g => new TopSellingItemDto(
-                g.Key ?? "Unknown",
+                g.Key,
                 g.Sum(i => i.Quantity),
                 g.Sum(i => i.UnitPrice * i.Quantity)))
             .OrderByDescending(x => x.Quantity)
             .Take(5)
-            .ToListAsync();
+            .ToList();
 
-        var byHour = await _db.Orders
-            .Where(o => o.CreatedAt >= today)
+        var byHour = todaysOrders
             .GroupBy(o => o.CreatedAt.Hour)
             .Select(g => new RevenueByHourDto(g.Key, g.Sum(o => o.Total), g.Count()))
             .OrderBy(x => x.Hour)
-            .ToListAsync();
+            .ToList();
 
         return Ok(new DashboardAnalyticsDto(
             totalOrders, totalRevenue, activeOrders,
-            tables.Count(t => t.IsOccupied), tables.Count,
+            tables.Count(t => t), tables.Count,
             Math.Round(avgValue, 2), topItems, byHour
         ));
     }

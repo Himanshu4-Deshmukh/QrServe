@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { getOrders, updateOrderStatus } from "@/lib/api";
 import { joinKitchen, startConnection } from "@/lib/signalr";
+import { playOrderNotificationSound, unlockNotificationSound } from "@/lib/notificationSound";
 import { Order, OrderStatus } from "@/types";
 import { ChefHat, Clock, XCircle, ArrowLeft, RefreshCw, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -33,15 +34,32 @@ function KitchenContent() {
 
   useEffect(() => {
     loadOrders();
+
+    const unlock = () => {
+      unlockNotificationSound().catch(() => {});
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+
     (async () => {
       try {
         const conn = await startConnection();
         await joinKitchen();
-        conn.on("NewOrder", (order: Order) => setOrders((prev) => [order, ...prev]));
+        conn.off("NewOrder");
+        conn.off("OrderStatusUpdated");
+        conn.on("NewOrder", (order: Order) => {
+          playOrderNotificationSound().catch(() => {});
+          setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [order, ...prev]));
+        });
         conn.on("OrderStatusUpdated", (update: { id: string; status: string }) =>
           setOrders((prev) => prev.map((o) => (o.id === update.id ? { ...o, status: update.status as OrderStatus } : o))));
       } catch (e) { console.error("SignalR:", e); }
     })();
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   const handleStatus = async (orderId: string, status: OrderStatus) => {
