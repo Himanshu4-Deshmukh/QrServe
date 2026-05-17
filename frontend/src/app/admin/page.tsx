@@ -9,7 +9,12 @@ import {
   createCategory, deleteCategory, createMenuItem, updateMenuItem, deleteMenuItem,
   updateOrderStatus, updatePayment, uploadMenuItemImage, deleteMenuItemImage, createTable, deleteTable,
 } from "@/lib/api";
-import { playOrderNotificationSound, unlockNotificationSound } from "@/lib/notificationSound";
+import {
+  playOrderNotificationSound,
+  stopAllOrderNotificationSounds,
+  stopOrderNotificationSound,
+  unlockNotificationSound,
+} from "@/lib/notificationSound";
 import { DashboardAnalytics, Order, MenuItem, Category, OrderStatus, RestaurantTable } from "@/types";
 import { startConnection, joinKitchen } from "@/lib/signalr";
 import { LayoutDashboard, ArrowLeft, ShoppingBag, UtensilsCrossed, Users, BarChart3, LogOut } from "lucide-react";
@@ -83,13 +88,14 @@ function AdminContent() {
         conn.off("OrderStatusUpdated");
 
         conn.on("NewOrder", (newOrder: Order) => {
-          playOrderNotificationSound().catch(() => {});
+          playOrderNotificationSound(newOrder.id).catch(() => {});
           setOrders((prev) => (prev.some((o) => o.id === newOrder.id) ? prev : [newOrder, ...prev]));
           getDashboardAnalytics().then(setAnalytics).catch(() => {});
           getTables().then(setTables).catch(() => {});
         });
 
         conn.on("OrderStatusUpdated", (update: { id: string; status: string }) => {
+          if (update.status !== "Pending") stopOrderNotificationSound(update.id);
           setOrders((prev) =>
             prev.map((o) => o.id === update.id ? { ...o, status: update.status as OrderStatus } : o)
           );
@@ -104,8 +110,19 @@ function AdminContent() {
     return () => {
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
+      stopAllOrderNotificationSounds();
     };
   }, []);
+
+  useEffect(() => {
+    orders.forEach((order) => {
+      if (order.status === "Pending") {
+        playOrderNotificationSound(order.id).catch(() => {});
+      } else {
+        stopOrderNotificationSound(order.id);
+      }
+    });
+  }, [orders]);
 
   // ── Order handlers ──────────────────────────────────────────────────────────
 

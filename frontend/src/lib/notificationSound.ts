@@ -2,6 +2,7 @@
 
 let audioContext: AudioContext | null = null;
 let unlocked = false;
+const activeAlerts = new Map<string, number>();
 
 function getAudioContext() {
   if (typeof window === "undefined") return null;
@@ -26,23 +27,28 @@ export async function unlockNotificationSound() {
   unlocked = true;
 }
 
-export async function playOrderNotificationSound() {
+async function ensureAudioReady() {
   const ctx = getAudioContext();
-  if (!ctx) return;
+  if (!ctx) return null;
 
   if (ctx.state === "suspended") {
     try {
       await ctx.resume();
     } catch {
-      return;
+      return null;
     }
   }
 
+  return ctx;
+}
+
+function playAlertBurst(ctx: AudioContext) {
   const now = ctx.currentTime;
   const gain = ctx.createGain();
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.25, now + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+  gain.gain.exponentialRampToValueAtTime(0.9, now + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.7, now + 0.12);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
   gain.connect(ctx.destination);
 
   const createOsc = (frequency: number, start: number, stop: number, type: OscillatorType = "sine", detune = 0) => {
@@ -55,7 +61,38 @@ export async function playOrderNotificationSound() {
     osc.stop(stop);
   };
 
-  createOsc(880, now, now + 0.18, "sine");
-  createOsc(1320, now + 0.08, now + 0.28, "sine");
-  createOsc(1040, now + 0.26, now + 0.48, "triangle");
+  createOsc(988, now, now + 0.14, "square");
+  createOsc(1318, now + 0.12, now + 0.28, "square");
+  createOsc(988, now + 0.28, now + 0.42, "square");
+}
+
+export async function playOrderNotificationSound(orderId: string) {
+  if (activeAlerts.has(orderId)) return;
+
+  const ctx = await ensureAudioReady();
+  if (!ctx) return;
+
+  playAlertBurst(ctx);
+
+  const timer = window.setInterval(() => {
+    if (audioContext?.state !== "running") return;
+    playAlertBurst(ctx);
+  }, 1100);
+
+  activeAlerts.set(orderId, timer);
+}
+
+export function stopOrderNotificationSound(orderId: string) {
+  const timer = activeAlerts.get(orderId);
+  if (timer == null) return;
+
+  window.clearInterval(timer);
+  activeAlerts.delete(orderId);
+}
+
+export function stopAllOrderNotificationSounds() {
+  for (const timer of Array.from(activeAlerts.values())) {
+    window.clearInterval(timer);
+  }
+  activeAlerts.clear();
 }
