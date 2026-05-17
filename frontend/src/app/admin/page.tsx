@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import {
   getDashboardAnalytics, getOrders, getTables, getCategories,
-  createCategory, createMenuItem, updateMenuItem, deleteMenuItem,
+  createCategory, deleteCategory, createMenuItem, updateMenuItem, deleteMenuItem,
   updateOrderStatus, updatePayment, uploadMenuItemImage, deleteMenuItemImage, createTable, deleteTable,
 } from "@/lib/api";
 import { playOrderNotificationSound, unlockNotificationSound } from "@/lib/notificationSound";
@@ -225,6 +225,16 @@ function AdminContent() {
     }
   };
 
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      await deleteCategory(id);
+      setCategories((prev) => prev.filter((cat) => cat.id !== id));
+      toast("Category deleted", "success");
+    } catch (e: any) {
+      toast(e?.message || "Failed to delete category", "error");
+    }
+  };
+
   const handleCreateTable = async (data: { tableNumber?: number; seats?: number }) => {
     try {
       await createTable(data);
@@ -317,6 +327,7 @@ function AdminContent() {
           <MenuTab
             categories={categories}
             onCreateCategory={handleCreateCategory}
+            onDeleteCategory={handleDeleteCategory}
             onCreateItem={handleCreateItem}
             onToggleItem={handleToggleItem}
             onDeleteItem={handleDeleteItem}

@@ -40,6 +40,8 @@ export const deleteMenuItem = (id: string) =>
   fetchApi(`/api/menu/items/${id}`, { method: "DELETE" });
 export const createCategory = (data: any) =>
   fetchApi("/api/menu/categories", { method: "POST", body: JSON.stringify(data) });
+export const deleteCategory = (id: string) =>
+  fetchApi(`/api/menu/categories/${id}`, { method: "DELETE" });
 
 export const getTables      = () => fetchApi<any[]>("/api/tables");
 export const getTable       = (id: string) => fetchApi<any>(`/api/tables/${id}`);

@@ -83,6 +83,28 @@ public class MenuController : ControllerBase
         return CreatedAtAction(nameof(GetCategories), new { id = cat.Id }, cat);
     }
 
+    [HttpDelete("categories/{id}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> DeleteCategory(Guid id)
+    {
+        var category = await _db.Categories
+            .Include(c => c.MenuItems)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (category == null)
+            return NotFound();
+
+        if (category.MenuItems.Any())
+        {
+            return Conflict("Delete or move the menu items in this category before removing it.");
+        }
+
+        _db.Categories.Remove(category);
+        await _db.SaveChangesAsync();
+
+        return NoContent();
+    }
+
     [HttpPost("items")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<MenuItem>> CreateItem(CreateMenuItemDto dto)

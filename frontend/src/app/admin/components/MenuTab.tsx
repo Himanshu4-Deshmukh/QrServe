@@ -13,6 +13,7 @@ function fullImageUrl(url: string | null): string | null {
 interface Props {
   categories: Category[];
   onCreateCategory: (data: { name: string; description: string | null; sortOrder: number }) => Promise<void>;
+  onDeleteCategory: (id: string) => Promise<void>;
   onCreateItem: (data: {
     categoryId: string; name: string; description: string | null;
     price: number; preparationTime: number; calories: number | null; tags: null;
@@ -25,7 +26,7 @@ interface Props {
 
 export default function MenuTab({
   categories,
-  onCreateCategory, onCreateItem,
+  onCreateCategory, onDeleteCategory, onCreateItem,
   onToggleItem, onDeleteItem,
   onImageUpload, onImageDelete,
 }: Props) {
@@ -38,6 +39,7 @@ export default function MenuTab({
   });
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
+  const [confirmDeleteCategoryId, setConfirmDeleteCategoryId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -159,8 +161,37 @@ export default function MenuTab({
 
       {categories.map((cat) => (
         <div key={cat.id} className="card">
-          <h3 className="font-bold text-lg mb-1">{cat.name}</h3>
-          <p className="text-sm text-gray-400 mb-4">{cat.description}</p>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <div>
+              <h3 className="font-bold text-lg">{cat.name}</h3>
+              <p className="text-sm text-gray-400">{cat.description}</p>
+            </div>
+            {confirmDeleteCategoryId === cat.id ? (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => { onDeleteCategory(cat.id); setConfirmDeleteCategoryId(null); }}
+                  className="p-1.5 bg-red-500 text-white rounded-lg text-xs"
+                >Yes</button>
+                <button
+                  onClick={() => setConfirmDeleteCategoryId(null)}
+                  className="p-1.5 bg-gray-200 rounded-lg text-xs"
+                >No</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDeleteCategoryId(cat.id)}
+                disabled={cat.menuItems.length > 0}
+                className={`p-2 rounded-lg shrink-0 ${
+                  cat.menuItems.length > 0
+                    ? "text-gray-300 cursor-not-allowed"
+                    : "hover:bg-red-50 text-red-400"
+                }`}
+                title={cat.menuItems.length > 0 ? "Delete the items in this category first" : "Delete category"}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <div className="space-y-3">
             {cat.menuItems.map((item) => {
               const imgSrc = fullImageUrl(item.imageUrl);
